@@ -1,68 +1,57 @@
-const express = require("express");
-const mongoose = require("mongoose");
-const dotenv = require("dotenv");
-const cors = require("cors");
-const path = require("path");
-const fs = require("fs");
+// server.js
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const path = require('path');
 
-dotenv.config();
+
+
 const app = express();
 
-// ---------------- Middleware ----------------
-const corsOptions = {
-  origin: ["http://localhost:3000","http://localhost:5173"],           // React dev server
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"], // allow auth header
-  credentials: true,
-};
-app.use(cors(corsOptions));
-
-// Handle preflight OPTIONS requests
-app.options("*", cors(corsOptions));
-
+// Middleware
 app.use(express.json());
 
-// ---------------- Ensure uploads folder exists ----------------
-const uploadDir = path.join(__dirname, "uploads/books");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log(`Created folder: ${uploadDir}`);
-}
+// CORS setup for frontend URL
+const allowedOrigins = [process.env.CLIENT_URL]; // e.g., https://your-frontend.vercel.app
+app.use(cors({
+  origin: function(origin, callback){
+    if(!origin) return callback(null, true); // allow server-to-server or Postman
+    if(allowedOrigins.indexOf(origin) === -1){
+      const msg = 'CORS policy does not allow access from this origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true
+}));
 
-// Serve static files
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Routes
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/user');
+const bookRoutes = require('./routes/book');
+const adminRoutes = require('./routes/admin');
+const locationRoutes = require('./routes/location');
 
-// ---------------- Routes ----------------
-try {
-  const authRoutes = require("./routes/auth");
-  const bookRoutes = require("./routes/book");
-  const userRoutes = require("./routes/user");
-  const adminRoutes = require("./routes/admin");
-  const locationRoutes = require("./routes/location");
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/books', bookRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/locations', locationRoutes);
 
-  if (authRoutes && authRoutes.stack) app.use("/api/auth", authRoutes);
-  if (bookRoutes && bookRoutes.stack) app.use("/api/books", bookRoutes);
-  if (userRoutes && userRoutes.stack) app.use("/api/users", userRoutes);
-  if (adminRoutes && adminRoutes.stack) app.use("/api/admin", adminRoutes);
-  if (locationRoutes && locationRoutes.stack) app.use("/api/location", locationRoutes);
-} catch (err) {
-  console.error("❌ Error importing routes:", err);
-}
+// Static files (uploads/images)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ---------------- Root ----------------
-app.get("/", (req, res) => {
-  res.send("EcoReadLoop Backend is running ✅");
-});
+// MongoDB connection
+const mongoUri = process.env.MONGO_URI;
+mongoose.connect(mongoUri, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log('MongoDB connected successfully'))
+.catch(err => console.error('MongoDB connection error:', err));
 
-// ---------------- MongoDB Connection ----------------
-mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => console.log("MongoDB connected ✅"))
-  .catch((err) => console.error("DB error ❌", err));
-
-// ---------------- Server ----------------
+// Server port
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT} 🚀`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
