@@ -52,4 +52,4 @@ router.delete("/book/:id", isAdmin, async (req, res) => {
   }
 });
 
-export default router;
+module.exports = router;
