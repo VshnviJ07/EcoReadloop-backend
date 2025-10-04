@@ -1,6 +1,6 @@
-import express from "express";
-import User from "../models/User.js";
-import Book from "../models/Book.js";
+const express = require("express");
+const User = require("../models/User");
+const Book = require("../models/Book");
 
 const router = express.Router();
 
