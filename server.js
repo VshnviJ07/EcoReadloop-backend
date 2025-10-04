@@ -10,24 +10,21 @@ const app = express();
 
 // ---------------- Middleware ----------------
 
-// ✅ Allow both local dev & deployed frontend (Render or Netlify)
+// Allow local dev & deployed frontend
 const corsOptions = {
   origin: [
     "http://localhost:3000",
     "http://localhost:5173",
-    "https://ecoreadloop.onrender.com", // your Render frontend URL
-    "https://ecoreadloop.netlify.app"   // or any deployed frontend domain
+    "https://ecoreadloop.onrender.com", // your Render frontend
+    "https://ecoreadloop.netlify.app",  // optional Netlify frontend
   ],
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 };
 app.use(cors(corsOptions));
-
-// Handle preflight OPTIONS requests
 app.options("*", cors(corsOptions));
-
-app.use(express.json({ limit: "10mb" })); // handle JSON bodies safely
+app.use(express.json({ limit: "10mb" })); // safe JSON body size
 
 // ---------------- Ensure uploads folder exists ----------------
 const uploadDir = path.join(__dirname, "uploads/books");
@@ -40,6 +37,8 @@ if (!fs.existsSync(uploadDir)) {
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ---------------- Routes ----------------
+// Make sure all route files use `module.exports = router;`
+// NOT `export default router;`
 try {
   const authRoutes = require("./routes/auth");
   const bookRoutes = require("./routes/book");
@@ -73,7 +72,7 @@ mongoose
 // ---------------- Server ----------------
 const PORT = process.env.PORT || 5000;
 
-// ✅ Important for Render (uses dynamic port)
+// Render assigns dynamic port, host must be 0.0.0.0
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
