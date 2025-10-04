@@ -10,7 +10,7 @@ const router = express.Router();
 
 // -------------------- RATE LIMITER --------------------
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
@@ -47,18 +47,11 @@ const sendOtpEmail = async (email, otp) => {
 router.post("/signup", authLimiter, async (req, res) => {
   try {
     const { fullName, identifier, password, age, city, address } = req.body;
-
-    if (!fullName || !identifier || !password) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Full name, email/mobile & password required." });
-    }
+    if (!fullName || !identifier || !password)
+      return res.status(400).json({ success: false, message: "Full name, email/mobile & password required." });
 
     const isEmail = /\S+@\S+\.\S+/.test(identifier);
-
-    const exists = await User.findOne({
-      $or: [{ email: identifier }, { mobile: identifier }],
-    });
+    const exists = await User.findOne({ $or: [{ email: identifier }, { mobile: identifier }] });
     if (exists) return res.status(409).json({ success: false, message: "User already registered." });
 
     if (password.length < 6)
@@ -119,11 +112,7 @@ router.post("/verify-signup-otp", async (req, res) => {
 router.post("/signin", authLimiter, async (req, res) => {
   try {
     const { identifier, password, useOtp } = req.body;
-
-    const user = await User.findOne({
-      $or: [{ email: identifier }, { mobile: identifier }],
-    });
-
+    const user = await User.findOne({ $or: [{ email: identifier }, { mobile: identifier }] });
     if (!user) return res.status(404).json({ success: false, message: "User not found." });
     if (!user.isVerified)
       return res.status(403).json({ success: false, message: "Account not verified." });
@@ -141,20 +130,12 @@ router.post("/signin", authLimiter, async (req, res) => {
     if (!isMatch)
       return res.status(400).json({ success: false, message: "Invalid credentials." });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
     res.json({
       success: true,
       message: "Signin successful.",
       token,
-      user: {
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        mobile: user.mobile,
-      },
+      user: { id: user._id, fullName: user.fullName, email: user.email, mobile: user.mobile },
     });
   } catch (err) {
     console.error("❌ Signin error:", err.message);
@@ -175,20 +156,12 @@ router.post("/verify-signin-otp", async (req, res) => {
     user.otpExpires = null;
     await user.save();
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "7d",
-    });
-
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
     res.json({
       success: true,
       message: "Signin verified successfully.",
       token,
-      user: {
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        mobile: user.mobile,
-      },
+      user: { id: user._id, fullName: user.fullName, email: user.email, mobile: user.mobile },
     });
   } catch (err) {
     console.error("❌ Verify signin OTP error:", err.message);
@@ -200,10 +173,7 @@ router.post("/verify-signin-otp", async (req, res) => {
 router.post("/forgot-password", authLimiter, async (req, res) => {
   try {
     const { identifier } = req.body;
-
-    const user = await User.findOne({
-      $or: [{ email: identifier }, { mobile: identifier }],
-    });
+    const user = await User.findOne({ $or: [{ email: identifier }, { mobile: identifier }] });
     if (!user) return res.status(404).json({ success: false, message: "User not found." });
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -212,12 +182,7 @@ router.post("/forgot-password", authLimiter, async (req, res) => {
     await user.save();
 
     if (user.email) await sendOtpEmail(user.email, otp);
-
-    res.json({
-      success: true,
-      message: "OTP sent for password reset.",
-      userId: user._id,
-    });
+    res.json({ success: true, message: "OTP sent for password reset.", userId: user._id });
   } catch (err) {
     console.error("❌ Forgot password error:", err.message);
     res.status(500).json({ success: false, message: "Server error." });
@@ -229,7 +194,6 @@ router.post("/reset-password", async (req, res) => {
   try {
     const { userId, otp, newPassword } = req.body;
     const user = await User.findById(userId);
-
     if (!user) return res.status(404).json({ success: false, message: "User not found." });
     if (user.otp !== otp || user.otpExpires < new Date())
       return res.status(400).json({ success: false, message: "Invalid or expired OTP." });
@@ -262,34 +226,17 @@ router.get("/profile", auth, async (req, res) => {
 router.patch("/profile", auth, async (req, res) => {
   try {
     const allowedFields = [
-      "fullName",
-      "email",
-      "mobile",
-      "alternateMobile",
-      "age",
-      "dob",
-      "address",
-      "city",
-      "state",
-      "pincode",
-      "gender",
+      "fullName", "email", "mobile", "alternateMobile", "age", "dob",
+      "address", "city", "state", "pincode", "gender",
     ];
 
     const updates = {};
-    for (const field of allowedFields) {
-      if (req.body[field] !== undefined) updates[field] = req.body[field];
-    }
+    for (const field of allowedFields) if (req.body[field] !== undefined) updates[field] = req.body[field];
 
-    const user = await User.findByIdAndUpdate(req.user.id, { $set: updates }, { new: true })
-      .select("-password -otp -otpExpires");
-
+    const user = await User.findByIdAndUpdate(req.user.id, { $set: updates }, { new: true }).select("-password -otp -otpExpires");
     if (!user) return res.status(404).json({ success: false, message: "User not found." });
 
-    res.json({
-      success: true,
-      message: "Profile updated successfully.",
-      user,
-    });
+    res.json({ success: true, message: "Profile updated successfully.", user });
   } catch (err) {
     console.error("❌ Profile update error:", err.message);
     res.status(500).json({ success: false, message: "Server error." });
