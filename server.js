@@ -1,57 +1,79 @@
-// server.js
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const path = require('path');
+const express = require("express");
+const mongoose = require("mongoose");
+const dotenv = require("dotenv");
+const cors = require("cors");
+const path = require("path");
+const fs = require("fs");
 
-
-
+dotenv.config();
 const app = express();
 
-// Middleware
-app.use(express.json());
+// ---------------- Middleware ----------------
 
-// CORS setup for frontend URL
-const allowedOrigins = [process.env.CLIENT_URL]; // e.g., https://your-frontend.vercel.app
-app.use(cors({
-  origin: function(origin, callback){
-    if(!origin) return callback(null, true); // allow server-to-server or Postman
-    if(allowedOrigins.indexOf(origin) === -1){
-      const msg = 'CORS policy does not allow access from this origin.';
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
-  credentials: true
-}));
+// ✅ Allow both local dev & deployed frontend (Render or Netlify)
+const corsOptions = {
+  origin: [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://ecoreadloop.onrender.com", // your Render frontend URL
+    "https://ecoreadloop.netlify.app"   // or any deployed frontend domain
+  ],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+};
+app.use(cors(corsOptions));
 
-// Routes
-const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/user');
-const bookRoutes = require('./routes/book');
-const adminRoutes = require('./routes/admin');
-const locationRoutes = require('./routes/location');
+// Handle preflight OPTIONS requests
+app.options("*", cors(corsOptions));
 
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/books', bookRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/locations', locationRoutes);
+app.use(express.json({ limit: "10mb" })); // handle JSON bodies safely
 
-// Static files (uploads/images)
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// ---------------- Ensure uploads folder exists ----------------
+const uploadDir = path.join(__dirname, "uploads/books");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log(`📁 Created folder: ${uploadDir}`);
+}
 
-// MongoDB connection
-const mongoUri = process.env.MONGO_URI;
-mongoose.connect(mongoUri, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('MongoDB connected successfully'))
-.catch(err => console.error('MongoDB connection error:', err));
+// Serve uploaded book images
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Server port
+// ---------------- Routes ----------------
+try {
+  const authRoutes = require("./routes/auth");
+  const bookRoutes = require("./routes/book");
+  const userRoutes = require("./routes/user");
+  const adminRoutes = require("./routes/admin");
+  const locationRoutes = require("./routes/location");
+
+  app.use("/api/auth", authRoutes);
+  app.use("/api/books", bookRoutes);
+  app.use("/api/users", userRoutes);
+  app.use("/api/admin", adminRoutes);
+  app.use("/api/location", locationRoutes);
+} catch (err) {
+  console.error("❌ Error importing routes:", err);
+}
+
+// ---------------- Root ----------------
+app.get("/", (req, res) => {
+  res.send("🌿 EcoReadLoop Backend is running successfully ✅");
+});
+
+// ---------------- MongoDB Connection ----------------
+mongoose
+  .connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("✅ MongoDB connected successfully"))
+  .catch((err) => console.error("❌ MongoDB connection error:", err));
+
+// ---------------- Server ----------------
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
+// ✅ Important for Render (uses dynamic port)
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});

@@ -4,14 +4,22 @@ const Book = require("../models/Book");
 const auth = require("../middleware/auth");
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 
-// Configure multer storage
+// ---------------- Multer Configuration ----------------
+
+// Ensure uploads folder exists
+const uploadPath = path.join(process.cwd(), "uploads", "books");
+if (!fs.existsSync(uploadPath)) {
+  fs.mkdirSync(uploadPath, { recursive: true });
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/books"); // 📁 create this folder in your project root
+    cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
+    cb(null, `${Date.now()}${path.extname(file.originalname)}`);
   },
 });
 
@@ -20,11 +28,17 @@ const upload = multer({ storage });
 // ---------------- Add New Book ----------------
 router.post("/add", auth, upload.single("image"), async (req, res) => {
   try {
-    const { title, author, category, description, type, price, rentDuration } = req.body;
+    const { title, author, category, description, type, price, rentDuration } =
+      req.body;
 
     if (!req.file) {
-      return res.status(400).json({ success: false, message: "Image is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Image is required" });
     }
+
+    // In production (Render), use absolute URLs for image access
+    const baseUrl = process.env.BACKEND_URL || req.protocol + "://" + req.get("host");
 
     const newBook = new Book({
       title,
@@ -35,15 +49,21 @@ router.post("/add", auth, upload.single("image"), async (req, res) => {
       price: type.toLowerCase() !== "donate" ? price : 0,
       rentDuration,
       seller: req.user.id,
-      imageUrl: `/uploads/books/${req.file.filename}`, // store file path
+      imageUrl: `${baseUrl}/uploads/books/${req.file.filename}`,
     });
 
     await newBook.save();
 
-    res.json({ success: true, message: "Book added successfully", book: newBook });
+    res.json({
+      success: true,
+      message: "Book added successfully",
+      book: newBook,
+    });
   } catch (err) {
     console.error("❌ Error adding book:", err);
-    res.status(500).json({ success: false, message: "Server error while adding book" });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error while adding book" });
   }
 });
 
@@ -57,11 +77,13 @@ router.get("/all", async (req, res) => {
     res.json({ success: true, books });
   } catch (err) {
     console.error("❌ Error fetching all books:", err);
-    res.status(500).json({ success: false, books: [], message: "Server error" });
+    res
+      .status(500)
+      .json({ success: false, books: [], message: "Server error" });
   }
 });
 
-// Get Books by Category (Public)
+// ---------------- Get Books by Category ----------------
 router.get("/category/:category", async (req, res) => {
   try {
     const categories = decodeURIComponent(req.params.category)
@@ -81,27 +103,29 @@ router.get("/category/:category", async (req, res) => {
   }
 });
 
-
-// ---------------- Get My Uploaded, Purchased & Nearby Books ----------------
+// ---------------- Get My Books (Uploaded, Purchased, Nearby) ----------------
 router.get("/mybooks", auth, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Uploaded books
-    const uploadedBooks = await Book.find({ seller: userId }).populate("seller", "fullName email mobile city state");
+    const uploadedBooks = await Book.find({ seller: userId }).populate(
+      "seller",
+      "fullName email mobile city state"
+    );
 
     const uploaded = { sell: [], rent: [], donate: [] };
-    uploadedBooks.forEach(b => {
+    uploadedBooks.forEach((b) => {
       const t = (b.type || "").toLowerCase();
       if (t === "sell") uploaded.sell.push(b);
       else if (t === "rent") uploaded.rent.push(b);
       else if (t === "donate") uploaded.donate.push(b);
     });
 
-    // Purchased books
-    const purchasedBooks = await Book.find({ purchasedBy: userId }).populate("seller", "fullName email mobile city state");
+    const purchasedBooks = await Book.find({ purchasedBy: userId }).populate(
+      "seller",
+      "fullName email mobile city state"
+    );
 
-    // Nearby books
     const { lat, lng } = req.query;
     let nearby = { sell: [], rent: [], donate: [] };
 
@@ -110,13 +134,16 @@ router.get("/mybooks", auth, async (req, res) => {
         seller: { $ne: userId },
         location: {
           $near: {
-            $geometry: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] },
+            $geometry: {
+              type: "Point",
+              coordinates: [parseFloat(lng), parseFloat(lat)],
+            },
             $maxDistance: 5000,
           },
         },
       }).populate("seller", "fullName email mobile city state");
 
-      nearbyBooks.forEach(b => {
+      nearbyBooks.forEach((b) => {
         const t = (b.type || "").toLowerCase();
         if (t === "sell") nearby.sell.push(b);
         else if (t === "rent") nearby.rent.push(b);
@@ -124,7 +151,12 @@ router.get("/mybooks", auth, async (req, res) => {
       });
     }
 
-    res.json({ success: true, uploaded, purchased: purchasedBooks || [], nearby });
+    res.json({
+      success: true,
+      uploaded,
+      purchased: purchasedBooks || [],
+      nearby,
+    });
   } catch (err) {
     console.error("❌ Error fetching my books:", err);
     res.status(500).json({
@@ -143,19 +175,26 @@ router.post("/wishlist/:bookId", auth, async (req, res) => {
     const userId = req.user.id;
     let book = await Book.findById(req.params.bookId);
 
-    if (!book) return res.status(404).json({ success: false, message: "Book not found" });
+    if (!book)
+      return res.status(404).json({ success: false, message: "Book not found" });
 
-    if (book.wishlist.some(id => id.toString() === userId)) book.wishlist.pull(userId);
+    if (book.wishlist.some((id) => id.toString() === userId))
+      book.wishlist.pull(userId);
     else book.wishlist.push(userId);
 
     await book.save();
 
-    book = await Book.findById(req.params.bookId).populate("seller", "fullName email mobile city state");
+    book = await Book.findById(req.params.bookId).populate(
+      "seller",
+      "fullName email mobile city state"
+    );
 
     res.json({ success: true, book });
   } catch (err) {
     console.error("❌ Error toggling wishlist:", err);
-    res.status(500).json({ success: false, message: "Server error while updating wishlist" });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error while updating wishlist" });
   }
 });
 
@@ -163,12 +202,19 @@ router.post("/wishlist/:bookId", auth, async (req, res) => {
 router.get("/my-wishlist", auth, async (req, res) => {
   try {
     const userId = req.user.id;
-    const wishlistBooks = await Book.find({ wishlist: userId }).populate("seller", "fullName email mobile city state");
+    const wishlistBooks = await Book.find({ wishlist: userId }).populate(
+      "seller",
+      "fullName email mobile city state"
+    );
 
     res.json({ success: true, wishlist: wishlistBooks || [] });
   } catch (err) {
     console.error("❌ Error fetching wishlist:", err);
-    res.status(500).json({ success: false, wishlist: [], message: "Server error while fetching wishlist" });
+    res.status(500).json({
+      success: false,
+      wishlist: [],
+      message: "Server error while fetching wishlist",
+    });
   }
 });
 
