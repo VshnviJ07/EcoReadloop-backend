@@ -80,6 +80,7 @@ Frontend is located in the Eco Read Loop Frontend Repository
 Make sure to update the frontend .env file with the backend URL:
 
 REACT_APP_API_URL=http://localhost:5000
+🔗 Frontend Repository https://github.com/VshnviJ07/EcoReadLoop-frontend
 
 👩‍💻 Author
 
